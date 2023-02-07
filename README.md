@@ -18,6 +18,9 @@ Basically, its a test app and needless to say **do not** use this in production.
 # export URL=`gcloud run services describe idp-on-cloud-run --region=us-central1 --format="value(status.url)"`
 export URL="https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app"
 
+git clone https://github.com/salrashid123/diy_oidc.git
+cd diy_oidc/
+
 export IAT=`date -u +%s`
 export EXP=`date -u +%s -d "+3600 seconds"`
 export EMAIL="alice@domain.com"
