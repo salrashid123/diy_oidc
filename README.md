@@ -1,11 +1,11 @@
 
 ## DIY OIDC Server 
 
-Simple `OIDC` server which will can issue arbitrary `JWT` claims.
+Simple `OIDC` server which will can issue arbitrary `oidc` tokens which an app can verify using the server's associated `JWK` endpoint/certificates
 
-The intent of this application is to provide a test harness against which you can authenticate any arbitrary system capable of supporting OIDC.
+The intent of this application is to provide a test harness against which you can configure a system which authenticates the bearer of an OIDC token using a JWK endpoint.
 
-This OIDC server does not require authentication to get a token; it will simply sign and issue an OIDC token with whatever claims you need and pass though to it.
+This OIDC server does not require authentication to get a token; all you have to do is post the JWT claims it needs to sign.  The response will be an OIDC token which you can submit to any other server for authentication.
 
 Basically, its a test app and needless to say **do not** use this in production...
 
@@ -30,9 +30,12 @@ export NAME="alice"
 export AUD="https://some_audience"
 envsubst < "templates/jwt.tmpl" > "/tmp/jwt.json"
 
+# simply post the JSON Claims...
 export JWT_TOKEN=`curl -s -X POST -d @/tmp/jwt.json  $URL/token`
 echo $JWT_TOKEN
 ```
+
+The response will be an OIDC token reflecting the claims you posted:
 
 You can view the contents of the JWT by decoding `$JWT_TOKEN` using [jwt.io](jwt.io) debugger
 
