@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -24,15 +23,24 @@ type OIDCConfigurationResponse struct {
 	SubjectTypesSupported            []string `json:"subject_types_supported"`
 }
 
+type key struct {
+	SigningMethod jwt.SigningMethod
+	PrivateKey    interface{}
+	PublicKey     interface{}
+	HMACKey       []byte
+}
+
 var (
-	privKeyRSA *rsa.PrivateKey
-	jwkBytes   []byte
-	alg        jwt.SigningMethod
+	jwkBytes []byte
+	keys     = make(map[string]*key)
 )
 
 const (
-	keyID  = "123456"
-	pubKey = `
+	hmacKeyID = "hmacKeyID_1"
+	hmacKey   = "e2c6c78e079ca23ac0d37fbbc0ae36a2d5c0f0c7186e70fbd6a964e60444a0de"
+
+	rsaKeyID  = "rsaKeyID_1"
+	rsaPubKey = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqqrpBHkLN4vT6g279KYT
 nnbKWHIEa+fK04wlamlrALQpV6QGfIrPwSgU/ElRFpsPJYWxCvEtYS01lBC70IeA
@@ -43,7 +51,7 @@ Fb3BIUyswBtxtGcigvk/ftkuSQjubiXe8UtltBI7INfs7vmAVuQr7YN8Alni4Z3B
 eQIDAQAB
 -----END PUBLIC KEY-----`
 
-	privKey = `
+	rsaPrivKey = `
 -----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAqqrpBHkLN4vT6g279KYTnnbKWHIEa+fK04wlamlrALQpV6QG
 fIrPwSgU/ElRFpsPJYWxCvEtYS01lBC70IeAhObR5DY9Z+jTvhk1tA+VrxyEhAHL
@@ -71,16 +79,38 @@ mZh5AoGAeVkFstY9lmcdEi2rHUAsR2WMOnzYP4WS+/dYIMsXVryNVa/obbjwz94N
 rWWOI9aKV6wvK+CIzHsI7hsFw7aF0S2x1gg4RvtxDgHCMbgI3t8tdCtph7cmDKNp
 W1NUvPpHH7t1YenNODRZSEo/ETn69WX6i0kV4BNI64+cU60pUwQ=
 -----END RSA PRIVATE KEY-----`
+
+	// EC
+	// openssl ecparam -name prime256v1 -genkey -noout -out ec_private-key.pem
+	// openssl ec -in ec_private-key.pem -pubout -out ec_public-key.pem
+	ecKeyID  = "ecKeyID_1"
+	ecPubKey = `
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQjKEvzgFPN7bIq6FpBKPcaBS1dCY
+aPwTO9YR4vZwCTrJqK2xDRJkWzWS9BuMbHJeE8Nva1bZK7/pkkIj5IKSKg==
+-----END PUBLIC KEY-----`
+	ecPrivKey = `
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIF343AResU+p7wF/p7kPBgWBgb00a70B86Mm5fboWxvMoAoGCCqGSM49
+AwEHoUQDQgAEQjKEvzgFPN7bIq6FpBKPcaBS1dCYaPwTO9YR4vZwCTrJqK2xDRJk
+WzWS9BuMbHJeE8Nva1bZK7/pkkIj5IKSKg==
+-----END EC PRIVATE KEY-----`
 )
 
-func createJWK(keyID string, ap rsa.PublicKey) (jwkBytes []byte, err error) {
-	jkey, err := jwk.New(ap)
+func createJWK(keyID string, k *key) (jwkBytes []byte, err error) {
+	var jkey jwk.Key
+	if k.SigningMethod == jwt.SigningMethodHS256 {
+		jkey, err = jwk.New(k.HMACKey)
+
+	} else {
+		jkey, err = jwk.New(k.PublicKey)
+	}
 	if err != nil {
 		return nil, err
 	}
 	jkey.Set(jwk.KeyIDKey, keyID)
 	jkey.Set(jwk.KeyUsageKey, "sig")
-	jkey.Set(jwk.AlgorithmKey, "RS256")
+	jkey.Set(jwk.AlgorithmKey, k.SigningMethod)
 
 	buf, err := json.MarshalIndent(jkey, "", "  ")
 	if err != nil {
@@ -95,12 +125,24 @@ func frontHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func certsHandler(w http.ResponseWriter, r *http.Request) {
-	resp := fmt.Sprintf(`{"keys": [ %s ] }`, string(jwkBytes))
 	w.Header().Set("content-Type", "application/json")
-	fmt.Fprint(w, resp)
+	fmt.Fprint(w, string(jwkBytes))
 }
 
 func tokenHandler(w http.ResponseWriter, r *http.Request) {
+
+	keyID := r.URL.Query().Get("kid")
+
+	// find out if this is a valid key
+	for k := range keys {
+		if k == keyID {
+			break
+		}
+	}
+	if keyID == "" {
+		log.Printf("Keyid nil, using default RS256 key %s", rsaKeyID)
+		keyID = rsaKeyID
+	}
 
 	var claims jwt.MapClaims
 
@@ -116,9 +158,14 @@ func tokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := jwt.NewWithClaims(alg, claims)
+	token := jwt.NewWithClaims(keys[keyID].SigningMethod, claims)
 	token.Header["kid"] = keyID
-	out, err := token.SignedString(privKeyRSA)
+	var out string
+	if keys[keyID].SigningMethod == jwt.SigningMethodHS256 {
+		out, err = token.SignedString(keys[keyID].HMACKey)
+	} else {
+		out, err = token.SignedString(keys[keyID].PrivateKey)
+	}
 	if err != nil {
 		log.Printf("Error creating JWT %v", err)
 		http.Error(w, fmt.Sprintf("Error creating JWT %v", err), http.StatusInternalServerError)
@@ -146,7 +193,7 @@ func wellKnownHandler(w http.ResponseWriter, r *http.Request) {
 	resp := &OIDCConfigurationResponse{
 		Issuer:                           issuer,
 		JWKsURI:                          jwkSetURL,
-		IDTokenSigningAlgValuesSupported: []string{"RS256"},
+		IDTokenSigningAlgValuesSupported: []string{jwt.SigningMethodRS256.Alg(), jwt.SigningMethodES256.Alg(), jwt.SigningMethodHS256.Alg()},
 		SubjectTypesSupported:            []string{"public"},
 		ResponseTypesSupported:           []string{"id_token"},
 	}
@@ -159,26 +206,65 @@ func wellKnownHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	block, _ := pem.Decode([]byte(privKey))
+	// read in all the keys
+
+	// add rsa
+	block, _ := pem.Decode([]byte(rsaPrivKey))
 	if block == nil {
-		log.Fatalf("no PEM block found in " + privKey)
+		log.Fatalf("no PEM block found in " + rsaPrivKey)
 	}
-	var err error
-	privKeyRSA, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	privKeyRSA, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
 		log.Fatalf("Unable to parse private key %v", err)
 	}
+	keys[rsaKeyID] = &key{
+		SigningMethod: jwt.SigningMethodRS256,
+		PrivateKey:    privKeyRSA,
+		PublicKey:     privKeyRSA.PublicKey,
+	}
 
-	jwkBytes, err = createJWK(keyID, privKeyRSA.PublicKey)
+	// add ec
+	block, _ = pem.Decode([]byte(ecPrivKey))
+	if block == nil {
+		log.Fatalf("no PEM block found in " + rsaPrivKey)
+	}
+	privKeyEC, err := x509.ParseECPrivateKey(block.Bytes)
 	if err != nil {
-		log.Fatalf("Unable to create JWK %v", err)
+		log.Fatalf("Unable to parse private key %v", err)
 	}
-	log.Printf("JWK %s\n", string(jwkBytes))
+	keys[ecKeyID] = &key{
+		SigningMethod: jwt.SigningMethodES256,
+		PrivateKey:    privKeyEC,
+		PublicKey:     privKeyEC.PublicKey,
+	}
 
-	alg = jwt.GetSigningMethod("RS256")
-	if alg == nil {
-		log.Fatalf("Unable to load go-jwt for RSA signing method %v", err)
+	// add hmac
+	keys[hmacKeyID] = &key{
+		SigningMethod: jwt.SigningMethodHS256,
+		HMACKey:       []byte(hmacKey),
 	}
+
+	// populate the registry
+
+	rsjwkBytes, err := createJWK(rsaKeyID, keys[rsaKeyID])
+	if err != nil {
+		log.Fatalf("Unable to create RS JWK %v", err)
+	}
+	log.Printf("Loaded JWK RS256 \n%s\n", string(rsjwkBytes))
+
+	ecjwkBytes, err := createJWK(ecKeyID, keys[ecKeyID])
+	if err != nil {
+		log.Fatalf("Unable to create EC JWK %v", err)
+	}
+	log.Printf("Loaded  JWK ES256 \n%s\n", string(ecjwkBytes))
+
+	hsjwkBytes, err := createJWK(hmacKeyID, keys[hmacKeyID])
+	if err != nil {
+		log.Fatalf("Unable to create HS JWK %v", err)
+	}
+	log.Printf("Loaded JWK HS256 \n%s\n", string(hsjwkBytes))
+
+	jwkBytes = []byte(fmt.Sprintf(`{"keys": [ %s, %s, %s ] }`, string(rsjwkBytes), string(ecjwkBytes), string(hsjwkBytes)))
 
 	r := mux.NewRouter()
 	r.StrictSlash(true)

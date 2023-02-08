@@ -31,7 +31,7 @@ export AUD="https://some_audience"
 envsubst < "templates/jwt.tmpl" > "/tmp/jwt.json"
 
 # simply post the JSON Claims...
-export JWT_TOKEN=`curl -s -X POST -d @/tmp/jwt.json  $URL/token`
+export JWT_TOKEN=`curl -s -X POST -d @/tmp/jwt.json  $URL/token?kid=rsaKeyID_1`
 echo $JWT_TOKEN
 ```
 
@@ -44,15 +44,15 @@ A sample `JWT` may look like
 ```json
 {
   "alg": "RS256",
-  "kid": "123456",
+  "kid": "rsaKeyID_1",
   "typ": "JWT"
 }
 {
   "aud": "https://some_audience",
   "email": "alice@domain.com",
   "email_verified": true,
-  "exp": 1675693406,
-  "iat": 1675689806,
+  "exp": 1675880504,
+  "iat": 1675876904,
   "isadmin": "true",
   "iss": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app",
   "mygroups": [
@@ -60,7 +60,7 @@ A sample `JWT` may look like
     "group2"
   ],
   "name": "alice",
-  "nbf": 1675689806,
+  "nbf": 1675876904,
   "sub": "alice@domain.com"
 }
 ```
@@ -73,16 +73,22 @@ As with any self-respecting OIDC server, it necessarily surfaces the [.well-know
 
 - `/certs` will return the `JWK` formatted public key used for `JWT` verification
 
-- `/token` endpoint will sign whatever `well-formed` JSON file is sent via POST
+- `/token?kid=rsaKeyID_1` endpoint will sign whatever `well-formed` JSON file is sent via POST
+   where the `kid` field denotes the algorithm the JWT should use for signing: 
+   - `RS256`: `kid=rsaKeyID_1` (default)
+   - `ES256`: `kid=ecKeyID_1`
+   - `HS256`: `kid=hmacKeyID_1`
 
+```
+curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/.well-known/openid-configuration |jq '.'
 
-```json
-$ curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/.well-known/openid-configuration |jq '.'
 {
   "issuer": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app",
   "jwks_uri": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs",
   "id_token_signing_alg_values_supported": [
-    "RS256"
+    "RS256",
+    "ES256",
+    "HS256"
   ],
   "response_types_supported": [
     "id_token"
@@ -95,20 +101,35 @@ $ curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/.well-known/openid-co
 
 While the certificates in `JWK` format is available at
 
-```json
-$ curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs | jq '.'
+```
+curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs | jq '.'
+
 {
   "keys": [
     {
-      "alg": "RS256",
       "e": "AQAB",
-      "kid": "123456",
+      "kid": "rsaKeyID_1",
       "kty": "RSA",
       "n": "qqrpBHkLN4vT6g279KYTnnbKWHIEa-fK04wlamlrALQpV6QGfIrPwSgU_ElRFpsPJYWxCvEtYS01lBC70IeAhObR5DY9Z-jTvhk1tA-VrxyEhAHLuCuCsAPLow4ZSJ-aB0vZuUtaV9-qO-0gyJEG9y_5FKT51Tbr0INtjDASH43seoQtsPDG2tnKEj9r7jOLUNehj5j4Dgv-sJMGe3EyKlw7p6vsIhsU23v0VrTxdHGuelzplxCUQJoPRSxgepYyVmfrB12XJ5uJtLhYwuTbFb3BIUyswBtxtGcigvk_ftkuSQjubiXe8UtltBI7INfs7vmAVuQr7YN8Alni4Z3BeQ",
+      "use": "sig"
+    },
+    {
+      "crv": "P-256",
+      "kid": "ecKeyID_1",
+      "kty": "EC",
+      "use": "sig",
+      "x": "QjKEvzgFPN7bIq6FpBKPcaBS1dCYaPwTO9YR4vZwCTo",
+      "y": "yaitsQ0SZFs1kvQbjGxyXhPDb2tW2Su_6ZJCI-SCkio"
+    },
+    {
+      "k": "ZTJjNmM3OGUwNzljYTIzYWMwZDM3ZmJiYzBhZTM2YTJkNWMwZjBjNzE4NmU3MGZiZDZhOTY0ZTYwNDQ0YTBkZQ",
+      "kid": "hmacKeyID_1",
+      "kty": "oct",
       "use": "sig"
     }
   ]
 }
+
 ```
 
 You can ofcourse deploy your own server with your own certs...just change the certs in `server.go` and deploy wherever.
@@ -135,10 +156,12 @@ Included in this repo is a simple go app that will verify the default JWT format
 To run
 
 ```log
-$ go run main.go --jwtToken=$JWT_TOKEN
-2023/02/06 08:52:12 Keys in JWT Set : [1]
-2023/02/06 08:52:12      Found OIDC KeyID  123456
-2023/02/06 08:52:12      OIDC doc has Audience [https://some_audience]   Issuer [https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app] and SubjectEmail [alice@domain.com]
+export URL="https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app"
+
+$ go run main.go --jwtToken=$JWT_TOKEN --jwkUrl=$URL/certs
+2023/02/08 12:24:28 Keys in JWT Set : [3]
+2023/02/08 12:24:28      Found OIDC KeyID  rsaKeyID_1
+2023/02/08 12:24:28      OIDC doc has Audience [https://some_audience]   Issuer [https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app] and SubjectEmail [alice@domain.com]
 ```
 
 ![images/verify.png](images/verify.png)
