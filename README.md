@@ -16,7 +16,7 @@ Basically, its a test app and needless to say **do not** use this in production.
 ```bash
 # i'm currently running it on cloud run here but you are free to deploy it on your own (see steps later on in the article)
 # export URL=`gcloud run services describe idp-on-cloud-run --region=us-central1 --format="value(status.url)"`
-export URL="https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app"
+export URL="https://idp-on-cloud-run-3kdezruzua-uc.a.run.app"
 
 git clone https://github.com/salrashid123/diy_oidc.git
 cd diy_oidc/
@@ -54,7 +54,7 @@ A sample `JWT` may look like
   "exp": 1675880504,
   "iat": 1675876904,
   "isadmin": "true",
-  "iss": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app",
+  "iss": "https://idp-on-cloud-run-3kdezruzua-uc.a.run.app",
   "mygroups": [
     "group1",
     "group2"
@@ -80,11 +80,11 @@ As with any self-respecting OIDC server, it necessarily surfaces the [.well-know
    - `HS256`: `kid=hmacKeyID_1`
 
 ```
-curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/.well-known/openid-configuration |jq '.'
+curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/.well-known/openid-configuration |jq '.'
 
 {
-  "issuer": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app",
-  "jwks_uri": "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs",
+  "issuer": "https://idp-on-cloud-run-3kdezruzua-uc.a.run.app",
+  "jwks_uri": "https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs",
   "id_token_signing_alg_values_supported": [
     "RS256",
     "ES256",
@@ -102,7 +102,7 @@ curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/.well-known/openid-conf
 While the certificates in `JWK` format is available at
 
 ```
-curl -s https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs | jq '.'
+curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs | jq '.'
 
 {
   "keys": [
@@ -156,12 +156,12 @@ Included in this repo is a simple go app that will verify the default JWT format
 To run
 
 ```log
-export URL="https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app"
+export URL="https://idp-on-cloud-run-3kdezruzua-uc.a.run.app"
 
 $ go run main.go --jwtToken=$JWT_TOKEN --jwkUrl=$URL/certs
 2023/02/08 12:24:28 Keys in JWT Set : [3]
 2023/02/08 12:24:28      Found OIDC KeyID  rsaKeyID_1
-2023/02/08 12:24:28      OIDC doc has Audience [https://some_audience]   Issuer [https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app] and SubjectEmail [alice@domain.com]
+2023/02/08 12:24:28      OIDC doc has Audience [https://some_audience]   Issuer [https://idp-on-cloud-run-3kdezruzua-uc.a.run.app] and SubjectEmail [alice@domain.com]
 ```
 
 ![images/verify.png](images/verify.png)

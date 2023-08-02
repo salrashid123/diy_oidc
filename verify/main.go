@@ -16,7 +16,7 @@ const ()
 
 var (
 	jwtSet   *jwk.Set
-	jwksURL  = flag.String("jwkUrl", "https://idp-on-cloud-run-6w42z6vi3q-uc.a.run.app/certs", "JWK Endpoint")
+	jwksURL  = flag.String("jwkUrl", "https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs", "JWK Endpoint")
 	jwtToken = flag.String("jwtToken", "", "JWT Token")
 )
 
