@@ -14,12 +14,12 @@ Basically, its a test app and needless to say **do not** use this in production.
 ### QuickStart
 
 ```bash
+git clone https://github.com/salrashid123/diy_oidc.git
+cd diy_oidc/
+
 # i'm currently running it on cloud run here but you are free to deploy it on your own (see steps later on in the article)
 # export URL=`gcloud run services describe idp-on-cloud-run --region=us-central1 --format="value(status.url)"`
 export URL="https://idp-on-cloud-run-3kdezruzua-uc.a.run.app"
-
-git clone https://github.com/salrashid123/diy_oidc.git
-cd diy_oidc/
 
 export IAT=`date -u +%s`
 export EXP=`date -u +%s -d "+3600 seconds"`
@@ -102,8 +102,7 @@ curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/.well-known/openid-conf
 While the certificates in `JWK` format is available at
 
 ```
-curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs | jq '.'
-
+$ curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs | jq '.'
 {
   "keys": [
     {
@@ -120,12 +119,6 @@ curl -s https://idp-on-cloud-run-3kdezruzua-uc.a.run.app/certs | jq '.'
       "use": "sig",
       "x": "QjKEvzgFPN7bIq6FpBKPcaBS1dCYaPwTO9YR4vZwCTo",
       "y": "yaitsQ0SZFs1kvQbjGxyXhPDb2tW2Su_6ZJCI-SCkio"
-    },
-    {
-      "k": "ZTJjNmM3OGUwNzljYTIzYWMwZDM3ZmJiYzBhZTM2YTJkNWMwZjBjNzE4NmU3MGZiZDZhOTY0ZTYwNDQ0YTBkZQ",
-      "kid": "hmacKeyID_1",
-      "kty": "oct",
-      "use": "sig"
     }
   ]
 }
@@ -155,13 +148,29 @@ Included in this repo is a simple go app that will verify the default JWT format
 
 To run
 
-```log
+```bash
 export URL="https://idp-on-cloud-run-3kdezruzua-uc.a.run.app"
 
-$ go run main.go --jwtToken=$JWT_TOKEN --jwkUrl=$URL/certs
-2023/02/08 12:24:28 Keys in JWT Set : [3]
-2023/02/08 12:24:28      Found OIDC KeyID  rsaKeyID_1
-2023/02/08 12:24:28      OIDC doc has Audience [https://some_audience]   Issuer [https://idp-on-cloud-run-3kdezruzua-uc.a.run.app] and SubjectEmail [alice@domain.com]
+curl -s $URL/certs | jq '.'
+curl -s $URL/.well-known/openid-configuration |jq '.'
+
+# rsa
+export JWT_TOKEN_RS=`curl -s -X POST -d @/tmp/jwt.json  $URL/token?kid=rsaKeyID_1`
+echo $JWT_TOKEN_RS
+
+go run main.go --jwtToken=$JWT_TOKEN_RS --jwkUrl=$URL/certs
+
+# ec
+export JWT_TOKEN_EC=`curl -s -X POST -d @/tmp/jwt.json  $URL/token?kid=ecKeyID_1`
+echo $JWT_TOKEN_EC
+
+go run main.go --jwtToken=$JWT_TOKEN_EC --jwkUrl=$URL/certs
+
+# hmac
+export JWT_TOKEN_HS=`curl -s -X POST -d @/tmp/jwt.json  $URL/token?kid=hmacKeyID_1`
+echo $JWT_TOKEN_HS
+
+go run main.go --jwtToken=$JWT_TOKEN_HS --jwkUrl=$URL/certs
 ```
 
 ![images/verify.png](images/verify.png)

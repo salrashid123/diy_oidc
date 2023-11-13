@@ -8,11 +8,14 @@ import (
 	"log"
 	"os"
 
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat/go-jwx/jwk"
 )
 
-const ()
+const (
+	hmacKeyID = "hmacKeyID_1"
+	hmacKey   = "e2c6c78e079ca23ac0d37fbbc0ae36a2d5c0f0c7186e70fbd6a964e60444a0de"
+)
 
 var (
 	jwtSet   *jwk.Set
@@ -41,23 +44,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to verify IDTOKEN: %v", err)
 	}
-	log.Printf("     OIDC doc has Audience [%s]   Issuer [%s] and SubjectEmail [%s]", doc.Audience, doc.StandardClaims.Issuer, doc.Email)
+	log.Printf("     OIDC doc has Audience [%s]   Issuer [%s] and SubjectEmail [%s]", doc.Audience, doc.RegisteredClaims.Issuer, doc.Email)
 	// End verification
 
 }
 
 type customJWT struct {
+	jwt.RegisteredClaims
 	MyGroups      []string `json:"mygroups,omitempty"`
 	Email         string   `json:"email,omitempty"`
 	EmailVerified bool     `json:"email_verified,omitempty"`
 	IsAdmin       string   `json:"is_admin,omitempty"`
-	jwt.StandardClaims
 }
 
 func getKey(token *jwt.Token) (interface{}, error) {
 	keyID, ok := token.Header["kid"].(string)
 	if !ok {
 		return nil, errors.New("expecting JWT header to have string kid")
+	}
+	if token.Method == jwt.SigningMethodHS256 {
+		if keyID == "hmacKeyID_1" {
+			return []byte(hmacKey), nil
+		} else {
+			return nil, errors.New("unable to find HMAC key")
+		}
 	}
 	if key := jwtSet.LookupKeyID(keyID); len(key) == 1 {
 		log.Printf("     Found OIDC KeyID  " + keyID)

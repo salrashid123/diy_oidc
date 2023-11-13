@@ -9,7 +9,7 @@ import (
 	"log"
 	"net/http"
 
-	jwt "github.com/golang-jwt/jwt/v4"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	jwk "github.com/lestrrat-go/jwx/jwk"
 	"golang.org/x/net/http2"
@@ -238,7 +238,7 @@ func main() {
 		PublicKey:     privKeyEC.PublicKey,
 	}
 
-	// add hmac
+	// // you'd never upload the hmac key to a public site like this though
 	keys[hmacKeyID] = &key{
 		SigningMethod: jwt.SigningMethodHS256,
 		HMACKey:       []byte(hmacKey),
@@ -258,13 +258,14 @@ func main() {
 	}
 	log.Printf("Loaded  JWK ES256 \n%s\n", string(ecjwkBytes))
 
-	hsjwkBytes, err := createJWK(hmacKeyID, keys[hmacKeyID])
-	if err != nil {
-		log.Fatalf("Unable to create HS JWK %v", err)
-	}
-	log.Printf("Loaded JWK HS256 \n%s\n", string(hsjwkBytes))
+	// hsjwkBytes, err := createJWK(hmacKeyID, keys[hmacKeyID])
+	// if err != nil {
+	// 	log.Fatalf("Unable to create HS JWK %v", err)
+	// }
+	// log.Printf("Loaded JWK HS256 \n%s\n", string(hsjwkBytes))
 
-	jwkBytes = []byte(fmt.Sprintf(`{"keys": [ %s, %s, %s ] }`, string(rsjwkBytes), string(ecjwkBytes), string(hsjwkBytes)))
+	//jwkBytes = []byte(fmt.Sprintf(`{"keys": [ %s, %s, %s ] }`, string(rsjwkBytes), string(ecjwkBytes), string(hsjwkBytes)))
+	jwkBytes = []byte(fmt.Sprintf(`{"keys": [ %s, %s ] }`, string(rsjwkBytes), string(ecjwkBytes)))
 
 	r := mux.NewRouter()
 	r.StrictSlash(true)
